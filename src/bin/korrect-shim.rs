@@ -12,28 +12,26 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-mod cli;
-
-struct KxConfig {
-    kx_path: PathBuf,
+struct KorrectConfig {
+    korrect_path: PathBuf,
     os: String,
     cpu_arch: String,
     debug: bool,
 }
 
-impl KxConfig {
+impl KorrectConfig {
     fn new(debug: bool) -> Result<Self> {
         let home = env::var("HOME")?;
-        let kx_path = Path::new(&home).join(".kx");
+        let korrect_path = Path::new(&home).join(".korrect");
         // let home = dirs::home_dir().context("Could not find home directory")?;
-        // let kx_path = home.join(".kx");
-        fs::create_dir_all(kx_path.join("cache"))?;
+        // let korrect_path = home.join(".korrect");
+        fs::create_dir_all(korrect_path.join("cache"))?;
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
 
         Ok(Self {
-            kx_path,
+            korrect_path,
             os,
             cpu_arch,
             debug,
@@ -60,7 +58,7 @@ impl KxConfig {
         // Fetch known version if no cached version
         let current_stable_version = Self::get_current_stable_version()?;
         let local_kubectl = self
-            .kx_path
+            .korrect_path
             .join(format!("kubectl-{}", current_stable_version));
 
         let output = ProcessCommand::new(local_kubectl)
@@ -88,11 +86,11 @@ impl KxConfig {
         let mut hasher = Sha256::new();
         hasher.update(kubeconfig.as_bytes());
         let hash = format!("{:x}", hasher.finalize())[..5].to_string();
-        Ok(self.kx_path.join("cache").join(hash))
+        Ok(self.korrect_path.join("cache").join(hash))
     }
 
     fn download_kubectl(&self, version: &str) -> Result<PathBuf> {
-        let target_path = self.kx_path.join(format!("kubectl-{}", version));
+        let target_path = self.korrect_path.join(format!("kubectl-{}", version));
 
         if target_path.exists() {
             return Ok(target_path);
@@ -113,7 +111,7 @@ impl KxConfig {
         Ok(target_path)
     }
 
-    fn run(&self, kubeconfig: Option<&str>, kubectl_args: Vec<String>) -> Result<()> {
+    fn run(&self) -> Result<()> {
         if self.debug {
             println!("Enabled verbose logging.");
         }
@@ -123,7 +121,7 @@ impl KxConfig {
         let _known_kubectl = self.download_kubectl(&known_version)?;
 
         // Get server version
-        let target_version = self.get_server_version(kubeconfig)?;
+        let target_version = self.get_server_version(None)?;
 
         // Download target version
         let target_kubectl = self.download_kubectl(&target_version)?;
@@ -134,7 +132,7 @@ impl KxConfig {
 
         // Execute kubectl with all arguments
         let status = ProcessCommand::new(target_kubectl)
-            .args(&kubectl_args)
+            .args(env::args().skip(1))
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -232,7 +230,7 @@ fn normalize_version(version: &str) -> String {
 }
 
 fn main() -> Result<()> {
-    let cli_opts = cli::CliOptions::parse();
-    let config = KxConfig::new(cli_opts.debug)?;
-    config.run(cli_opts.kubeconfig.as_deref(), cli_opts.kubectl_args)
+    let debug = env::var("DEBUG").map_or(false, |v| v == "true");
+    let config = KorrectConfig::new(debug)?;
+    config.run()
 }

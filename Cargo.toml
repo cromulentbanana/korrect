@@ -1,8 +1,18 @@
 [package]
-name = "k"
+name = "korrect"
 version = "0.1.0"
 authors = ["dan@badpacket.in"]
 edition = "2021"
+description = "A kubectl wrapper that always invokes the correct kubectl version."
+
+
+[[bin]]
+name = "korrect"
+path = "src/bin/korrect.rs"
+
+[[bin]]
+name = "korrect-shim"
+path = "src/bin/korrect-shim.rs"
 
 [dependencies]
 #https://doc.rust-lang.org/cargo/reference/resolver.html
