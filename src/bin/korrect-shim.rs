@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 
 struct KorrectConfig {
     korrect_path: PathBuf,
+    korrect_bin_path: PathBuf,
     os: String,
     cpu_arch: String,
     debug: bool,
@@ -23,15 +24,16 @@ impl KorrectConfig {
     fn new(debug: bool) -> Result<Self> {
         let home = env::var("HOME")?;
         let korrect_path = Path::new(&home).join(".korrect");
-        // let home = dirs::home_dir().context("Could not find home directory")?;
-        // let korrect_path = home.join(".korrect");
-        fs::create_dir_all(korrect_path.join("cache"))?;
+        let korrect_bin_path = korrect_path.join("bin");
+        fs::create_dir_all(&korrect_bin_path)?;
+        fs::create_dir_all(&korrect_path.join("cache"))?;
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
 
         Ok(Self {
             korrect_path,
+            korrect_bin_path,
             os,
             cpu_arch,
             debug,
@@ -45,7 +47,8 @@ impl KorrectConfig {
     fn get_server_version(&self, kubeconfig: Option<&str>) -> Result<String> {
         let kubeconfig = match kubeconfig {
             Some(config) => config.to_string(),
-            None => std::env::var("KUBECONFIG").context("No KUBECONFIG specified")?,
+            //FIXME use a proper home
+            None => "~/.kube/config".to_owned(),
         };
 
         let cache_file = self.get_version_cache_file(&kubeconfig)?;
@@ -58,8 +61,11 @@ impl KorrectConfig {
         // Fetch known version if no cached version
         let current_stable_version = Self::get_current_stable_version()?;
         let local_kubectl = self
-            .korrect_path
+            .korrect_bin_path
             .join(format!("kubectl-{}", current_stable_version));
+
+        // Cache the version
+        fs::write(&cache_file, &current_stable_version)?;
 
         let output = ProcessCommand::new(local_kubectl)
             .arg("version")
@@ -90,7 +96,7 @@ impl KorrectConfig {
     }
 
     fn download_kubectl(&self, version: &str) -> Result<PathBuf> {
-        let target_path = self.korrect_path.join(format!("kubectl-{}", version));
+        let target_path = self.korrect_bin_path.join(format!("kubectl-{}", version));
 
         if target_path.exists() {
             return Ok(target_path);
@@ -121,7 +127,10 @@ impl KorrectConfig {
         let _known_kubectl = self.download_kubectl(&known_version)?;
 
         // Get server version
-        let target_version = self.get_server_version(None)?;
+        //TODO Fix the dependency on env var KUBECONFIG
+        let kconf_owned = std::env::var("KUBECONFIG").ok();
+        let kconf = kconf_owned.as_deref();
+        let target_version = self.get_server_version(kconf)?;
 
         // Download target version
         let target_kubectl = self.download_kubectl(&target_version)?;

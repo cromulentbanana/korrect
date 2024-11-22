@@ -21,8 +21,11 @@ fn setup() -> anyhow::Result<()> {
 
     // Copy korrect-shim to ~/.korrect/bin
     let shim_source = current_dir.join("korrect-shim");
-    let shim_dest = bin_dir.join("korrect-shim");
+    let shim_dest = bin_dir.join("kubectl-shim");
     fs::copy(&shim_source, &shim_dest)?;
+
+    std::os::unix::fs::symlink(&shim_dest, bin_dir.join("kubectl"))?;
+    std::os::unix::fs::symlink(&shim_dest, bin_dir.join("k"))?;
 
     // Set executable permissions (rwxr-xr-x)
     let mut perms = fs::metadata(&shim_dest)?.permissions();
@@ -34,6 +37,7 @@ fn setup() -> anyhow::Result<()> {
         shim_dest.display()
     );
     println!("Please add {:?} to your PATH", bin_dir);
+    println!("export PATH={:?}:$PATH", bin_dir);
 
     Ok(())
 }
