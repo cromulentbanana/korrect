@@ -1,14 +1,18 @@
 use regex::Regex;
 use std::env;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest;
+use reqwest::blocking::Client;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+mod cli;
 
 struct KxConfig {
     kx_path: PathBuf,
@@ -18,14 +22,15 @@ struct KxConfig {
 }
 
 impl KxConfig {
-    fn new() -> Result<Self> {
+    fn new(debug: bool) -> Result<Self> {
         let home = env::var("HOME")?;
         let kx_path = Path::new(&home).join(".kx");
+        // let home = dirs::home_dir().context("Could not find home directory")?;
+        // let kx_path = home.join(".kx");
         fs::create_dir_all(kx_path.join("cache"))?;
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
-        let debug = env::var("DEBUG").map_or(false, |v| v == "true");
 
         Ok(Self {
             kx_path,
@@ -34,14 +39,17 @@ impl KxConfig {
             debug,
         })
     }
-
-    fn get_known_version() -> Result<String> {
+    fn get_current_stable_version() -> Result<String> {
         let resp = reqwest::blocking::get("https://dl.k8s.io/release/stable.txt")?;
         resp.text().map_err(|e| anyhow::anyhow!(e))
     }
 
-    fn get_server_version(&self) -> Result<String> {
-        let kubeconfig = env::var("KUBECONFIG")?;
+    fn get_server_version(&self, kubeconfig: Option<&str>) -> Result<String> {
+        let kubeconfig = match kubeconfig {
+            Some(config) => config.to_string(),
+            None => std::env::var("KUBECONFIG").context("No KUBECONFIG specified")?,
+        };
+
         let cache_file = self.get_version_cache_file(&kubeconfig)?;
 
         // Try reading from cache first
@@ -50,10 +58,12 @@ impl KxConfig {
         }
 
         // Fetch known version if no cached version
-        let known_version = Self::get_known_version()?;
-        let local_kubectl = self.kx_path.join(format!("kubectl-{}", known_version));
+        let current_stable_version = Self::get_current_stable_version()?;
+        let local_kubectl = self
+            .kx_path
+            .join(format!("kubectl-{}", current_stable_version));
 
-        let output = Command::new(local_kubectl)
+        let output = ProcessCommand::new(local_kubectl)
             .arg("version")
             .arg("-o")
             .arg("json")
@@ -93,33 +103,27 @@ impl KxConfig {
             version, self.os, self.cpu_arch
         );
 
-        let resp = reqwest::blocking::get(&url)?;
-        let mut dest = File::create(&target_path)?;
-        dest.write_all(&resp.bytes()?)?;
+        // let resp = reqwest::blocking::get(&url)?;
+        // let mut dest = File::create(&target_path)?;
+        // dest.write_all(&resp.bytes()?)?;
 
+        download_file_with_progress(&url, &target_path).context("Failed to download file")?;
         // Make executable
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = dest.metadata()?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&target_path, perms)?;
-        }
 
         Ok(target_path)
     }
 
-    fn run(&self) -> Result<()> {
+    fn run(&self, kubeconfig: Option<&str>, kubectl_args: Vec<String>) -> Result<()> {
         if self.debug {
             println!("Enabled verbose logging.");
         }
 
         // Ensure the latest stable kubectl is downloaded
-        let known_version = Self::get_known_version()?;
+        let known_version = Self::get_current_stable_version()?;
         let _known_kubectl = self.download_kubectl(&known_version)?;
 
         // Get server version
-        let target_version = self.get_server_version()?;
+        let target_version = self.get_server_version(kubeconfig)?;
 
         // Download target version
         let target_kubectl = self.download_kubectl(&target_version)?;
@@ -127,9 +131,10 @@ impl KxConfig {
         if self.debug {
             println!("using [{}].", target_version);
         }
+
         // Execute kubectl with all arguments
-        let status = Command::new(target_kubectl)
-            .args(env::args().skip(1))
+        let status = ProcessCommand::new(target_kubectl)
+            .args(&kubectl_args)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -140,7 +145,6 @@ impl KxConfig {
 }
 
 fn detect_os() -> String {
-    println!("detect_os");
     match env::consts::OS {
         "macos" => "darwin".to_string(),
         "windows" => "windows".to_string(),
@@ -158,8 +162,57 @@ fn detect_cpu_arch() -> String {
     }
 }
 
+fn download_file_with_progress(url: &str, output_path: &PathBuf) -> Result<()> {
+    // Create a blocking reqwest client
+    let client = Client::new();
+
+    // Send a GET request and get the response
+    let mut response = client.get(url).send()?;
+
+    // Get the total file size
+    let total_size = response.content_length().unwrap_or(0);
+
+    // Create a progress bar
+    let pb = ProgressBar::new(total_size);
+    // pb.set_style(ProgressStyle::default_spinner());
+    pb.set_style(ProgressStyle::default_bar().template("{msg} {spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+    .progress_chars("#>-"));
+    pb.set_message(format!("Downloading {}", &url));
+
+    // Create the output file
+    let mut dest = File::create(output_path)?;
+
+    // Buffer for reading chunks
+    let mut buffer = vec![0; 8192]; // 8KB chunks
+    let mut downloaded: u64 = 0;
+
+    // Download with progress tracking
+    loop {
+        let bytes_read = response.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        dest.write_all(&buffer[0..bytes_read])?;
+        downloaded += bytes_read as u64;
+        pb.set_position(downloaded);
+    }
+
+    // Complete the progress bar
+    pb.finish_with_message("Download complete");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = dest.metadata()?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&output_path, perms)?;
+    }
+    Ok(())
+}
+
 fn normalize_version(version: &str) -> String {
-    println!("normalize vesion");
     // Define a regex to match the `vX.Y.Z` pattern
     let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)").unwrap();
 
@@ -179,6 +232,7 @@ fn normalize_version(version: &str) -> String {
 }
 
 fn main() -> Result<()> {
-    let config = KxConfig::new()?;
-    config.run()
+    let cli_opts = cli::CliOptions::parse();
+    let config = KxConfig::new(cli_opts.debug)?;
+    config.run(cli_opts.kubeconfig.as_deref(), cli_opts.kubectl_args)
 }
