@@ -1,0 +1,104 @@
+# Define the stages for our pipeline
+stages:
+  - test
+  - build
+  - release
+
+# Use the official Rust image
+image: rust:latest
+
+# Cache dependencies between builds
+cache:
+  paths:
+    - target/
+    - ~/.cargo/
+
+# Variables used across jobs
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  RUST_BACKTRACE: 1
+  # Specify targets for cross-compilation
+  TARGETS: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc"
+
+# Test job that runs on every push
+test:
+  stage: test
+  script:
+    - cargo test --verbose
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Build job that creates release artifacts
+build:
+  stage: build
+  needs:
+    - test
+  script:
+    # Install cross-compilation tools
+    - apt-get update && apt-get install -y musl-tools
+    - rustup target add x86_64-unknown-linux-musl
+    - rustup target add aarch64-unknown-linux-musl
+    
+    # Build for Linux (x86_64)
+    - cargo build --release --target x86_64-unknown-linux-musl
+    - cp target/x86_64-unknown-linux-musl/release/korrect korrect-x86_64-linux
+    - cp target/x86_64-unknown-linux-musl/release/korrect-shim korrect-shim-x86_64-linux
+    
+    # Build for Linux (aarch64)
+    - cargo build --release --target aarch64-unknown-linux-musl
+    - cp target/aarch64-unknown-linux-musl/release/korrect korrect-aarch64-linux
+    - cp target/aarch64-unknown-linux-musl/release/korrect-shim korrect-shim-aarch64-linux
+    
+    # Create archive for each platform
+    - tar -czf korrect-x86_64-linux.tar.gz korrect-x86_64-linux korrect-shim-x86_64-linux
+    - tar -czf korrect-aarch64-linux.tar.gz korrect-aarch64-linux korrect-shim-aarch64-linux
+    
+    # Calculate SHA256 checksums
+    - sha256sum korrect-x86_64-linux.tar.gz > korrect-x86_64-linux.tar.gz.sha256
+    - sha256sum korrect-aarch64-linux.tar.gz > korrect-aarch64-linux.tar.gz.sha256
+  artifacts:
+    paths:
+      - korrect-x86_64-linux.tar.gz
+      - korrect-aarch64-linux.tar.gz
+      - korrect-x86_64-linux.tar.gz.sha256
+      - korrect-aarch64-linux.tar.gz.sha256
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# Release job that creates a GitLab release
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - build
+  script:
+    - |
+      release-cli create --name "Release $CI_COMMIT_TAG" \
+        --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"korrect-x86_64-linux.tar.gz\",\"url\":\"${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/korrect-x86_64-linux.tar.gz\"}" \
+        --assets-link "{\"name\":\"korrect-aarch64-linux.tar.gz\",\"url\":\"${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/korrect-aarch64-linux.tar.gz\"}" \
+        --assets-link "{\"name\":\"korrect-x86_64-linux.tar.gz.sha256\",\"url\":\"${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/korrect-x86_64-linux.tar.gz.sha256\"}" \
+        --assets-link "{\"name\":\"korrect-aarch64-linux.tar.gz.sha256\",\"url\":\"${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/korrect-aarch64-linux.tar.gz.sha256\"}"
+  rules:
+    - if: $CI_COMMIT_TAG    # Only run on tags
+
+# Optional: Build and publish Docker image
+docker:
+  stage: release
+  image: docker:stable
+  services:
+    - docker:dind
+  needs:
+    - build
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG .
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_TAG    # Only run on tags
