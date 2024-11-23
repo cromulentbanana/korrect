@@ -1,7 +1,12 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author, 
+    version = concat!(env!("CARGO_PKG_VERSION"), concat!("_", env!("GIT_SHORT_HASH"))),
+    about,
+    color = clap::ColorChoice::Auto,
+    long_about)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use korrect::cli::{Cli, Commands};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -70,7 +70,8 @@ fn main() -> anyhow::Result<()> {
             println!("Shell completions not yet implemented");
         }
         None => {
-            println!("No command specified. Use --help for usage information.");
+            Cli::command().print_help()?;
+            println!();
         }
     }
 

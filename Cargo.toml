@@ -3,7 +3,7 @@ name = "korrect"
 version = "0.1.0"
 authors = ["dan@badpacket.in"]
 edition = "2021"
-description = "A kubectl wrapper that always invokes the correct kubectl version."
+description = "A kubectl version managing shim that invokes the correct kubectl version."
 
 
 [[bin]]
