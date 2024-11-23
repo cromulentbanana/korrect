@@ -80,12 +80,14 @@ After installation, korrect creates the following directory structure:
 
 ```
 ~/.korrect/
-├─ cache/            # The contents of the active kubeconfig are hashed to reference
-├                    # the version-specific kubectl belonging to it 
+├─ cache/              # The contents of the active kubeconfig are hashed to reference
+├                      # the version-specific kubectl belonging to it 
 └── bin/
-    ├── kubectl-shim  # The kubectl shim executable which does all the magic
-    ├── kubectl       # Symlink to kubectl-shim
-    └── k             # Symlink to kubectl-shim
+    ├── k              # Symlink to kubectl-shim
+    ├── kubectl        # Symlink to kubectl-shim
+    ├── kubectl-shim   # The executable which dispatches specific kubectl versions
+    ├── kubectl-vA.B.C # Binary auto-downloaded by kubectl-shim or placed here by you
+    └── kubectl-vX.Y.Z # Binary auto-downloaded or kubectl-shim or placed here by you
 ```
 
 ## Configuration
