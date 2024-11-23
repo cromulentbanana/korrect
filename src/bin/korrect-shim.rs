@@ -1,4 +1,3 @@
-use regex::Regex;
 use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -7,7 +6,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest;
+use regex::Regex;
 use reqwest::blocking::Client;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -67,9 +66,6 @@ impl KorrectConfig {
             .korrect_bin_path
             .join(format!("kubectl-{}", current_stable_version));
 
-        // Cache the version
-        fs::write(&cache_file, &current_stable_version)?;
-
         let output = ProcessCommand::new(local_kubectl)
             .arg("version")
             .arg("-o")
@@ -77,10 +73,12 @@ impl KorrectConfig {
             .output()?;
 
         let json: Value = serde_json::from_slice(&output.stdout)?;
-        let mut version = json["serverVersion"]["gitVersion"]
-            .as_str()
-            .context("Unable to get version information from cluster")?
-            .to_string();
+        let mut version = match json["serverVersion"]["gitVersion"].as_str() {
+            Some(value) => value.to_string(),
+            None => {
+                return Ok(current_stable_version);
+            }
+        };
 
         // Normalize version
         version = normalize_version(&version);
@@ -210,7 +208,7 @@ fn download_file_with_progress(url: &str, output_path: &PathBuf) -> Result<()> {
     }
 
     // Complete the progress bar
-    pb.finish_with_message("Download complete");
+    // pb.finish_with_message("Download complete");
 
     #[cfg(unix)]
     {
