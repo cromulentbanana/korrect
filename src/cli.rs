@@ -1,4 +1,4 @@
-use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
+use clap::{builder::styling, ArgGroup, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use std::io::{stdout, Error};
 
@@ -7,6 +7,7 @@ use std::io::{stdout, Error};
     author,
     version = concat!(env!("CARGO_PKG_VERSION"), concat!("_", env!("GIT_SHORT_HASH"))),
     about,
+    styles = styles(),
     color = clap::ColorChoice::Auto,
     long_about)]
 pub struct Cli {
@@ -138,4 +139,20 @@ fn print_installation_instructions(bin_name: &str) {
 
     println!("\nNote: You can also generate completions to stdout and redirect them wherever you prefer:");
     println!("  {} completions <shell>", bin_name);
+}
+
+fn styles() -> styling::Styles {
+    styling::Styles::plain()
+        .header(
+            styling::AnsiColor::BrightBlue.on_default()
+                | styling::Effects::BOLD
+                | styling::Effects::ITALIC,
+        )
+        .usage(
+            styling::AnsiColor::BrightBlue.on_default()
+                | styling::Effects::BOLD
+                | styling::Effects::ITALIC,
+        )
+        .literal(styling::AnsiColor::Green.on_default() | styling::Effects::BOLD)
+        .placeholder(styling::AnsiColor::BrightBlue.on_default())
 }
