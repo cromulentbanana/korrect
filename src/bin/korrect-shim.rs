@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use reqwest::blocking::Client;
@@ -26,8 +26,9 @@ impl KorrectConfig {
         let dl_url = env::var("KORRECT_BASE_URL").unwrap_or("https://dl.k8s.io".to_owned());
         let korrect_path = Path::new(&home).join(".korrect");
         let korrect_bin_path = korrect_path.join("bin");
+        let korrect_cache_path = korrect_path.join("cache");
         fs::create_dir_all(&korrect_bin_path)?;
-        fs::create_dir_all(&korrect_path.join("cache"))?;
+        fs::create_dir_all(&korrect_cache_path)?;
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
@@ -89,7 +90,7 @@ impl KorrectConfig {
         };
 
         // Normalize version
-        version = normalize_version(&version);
+        version = normalize_version(&version)?;
 
         // Cache the version
         fs::write(&cache_file, &version)?;
@@ -98,9 +99,6 @@ impl KorrectConfig {
     }
 
     fn get_version_cache_file(&self, kubeconfig: &str) -> Result<PathBuf> {
-        if self.debug {
-            println!("in get_version_cache");
-        }
         let mut hasher = Sha256::new();
         // let contents = fs::read_to_string(&kubeconfig).unwrap_or(kubeconfig.to_owned());
         let contents = fs::read_to_string(&kubeconfig).unwrap_or("".to_owned());
@@ -236,22 +234,44 @@ fn download_file_with_progress(url: &str, output_path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn normalize_version(version: &str) -> String {
+// //TODO This should return an error, not an empty string
+// fn normalize_version(version: &str) -> String {
+//     // Define a regex to match the `vX.Y.Z` pattern
+//     let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)").unwrap();
+
+//     // Search for the pattern in the input string
+//     if let Some(captures) = re.captures(version) {
+//         // Construct the normalized version string
+//         format!(
+//             "v{}.{}.{}",
+//             &captures[1], // X
+//             &captures[2], // Y
+//             &captures[3]  // Z
+//         )
+//     } else {
+//         // Return an empty string or handle errors gracefully if no match is found
+//         String::new()
+//     }
+// }
+
+fn normalize_version(version: &str) -> Result<String> {
     // Define a regex to match the `vX.Y.Z` pattern
-    let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)").unwrap();
+    let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)")?;
 
     // Search for the pattern in the input string
     if let Some(captures) = re.captures(version) {
         // Construct the normalized version string
-        format!(
+        Ok(format!(
             "v{}.{}.{}",
             &captures[1], // X
             &captures[2], // Y
             &captures[3]  // Z
-        )
+        ))
     } else {
-        // Return an empty string or handle errors gracefully if no match is found
-        String::new()
+        // Return an error if no match is found
+        Err(anyhow!(
+            "Version string does not match the expected pattern"
+        ))
     }
 }
 
@@ -259,4 +279,148 @@ fn main() -> Result<()> {
     let debug = env::var("DEBUG").map_or(false, |v| v == "true");
     let config = KorrectConfig::new(debug)?;
     config.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    // Helper function to create a temporary home directory
+    fn setup_temp_home() -> (TempDir, String) {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_home = temp_dir.path().to_str().unwrap().to_owned();
+        env::set_var("HOME", &temp_home);
+        (temp_dir, temp_home)
+    }
+
+    #[test]
+    fn test_korrect_config_new() {
+        let (_temp_dir, temp_home) = setup_temp_home();
+
+        let config = KorrectConfig::new(false).unwrap();
+
+        assert_eq!(
+            config.korrect_path,
+            PathBuf::from(&temp_home).join(".korrect")
+        );
+        assert_eq!(
+            config.korrect_bin_path,
+            PathBuf::from(&temp_home).join(".korrect").join("bin")
+        );
+        assert!(config.korrect_path.exists());
+        assert!(config.korrect_bin_path.exists());
+    }
+
+    #[test]
+    fn test_detect_os() {
+        let os = detect_os();
+        match env::consts::OS {
+            "macos" => assert_eq!(os, "darwin"),
+            "windows" => assert_eq!(os, "windows"),
+            _ => assert_eq!(os, "linux"),
+        }
+    }
+
+    #[test]
+    fn test_detect_cpu_arch() {
+        let arch = detect_cpu_arch();
+        match env::consts::ARCH {
+            "x86" => assert_eq!(arch, "386"),
+            "x86_64" => assert_eq!(arch, "amd64"),
+            "arm" => assert_eq!(arch, "arm"),
+            "aarch64" => assert_eq!(arch, "arm64"),
+            _ => assert_eq!(arch, env::consts::ARCH),
+        }
+    }
+
+    #[test]
+    fn test_normalize_version() {
+        assert_eq!(normalize_version("v1.2.3").unwrap(), "v1.2.3");
+        assert_eq!(normalize_version("v7.24.31").unwrap(), "v7.24.31");
+        assert_eq!(
+            normalize_version("somethingv1.2.3-alpha").unwrap(),
+            "v1.2.3"
+        );
+        assert_eq!(normalize_version("v1.2.3-alpha").unwrap(), "v1.2.3");
+
+        // Cases that should fail to match and return an error
+        assert!(normalize_version("version1.2.3").is_err());
+        assert!(normalize_version("invalid").is_err());
+    }
+
+    #[test]
+    fn test_get_version_cache_file() {
+        let (_temp_dir, _) = setup_temp_home();
+        let config = KorrectConfig::new(false).unwrap();
+
+        // Create a temporary kubeconfig file
+        let temp_kubeconfig_dir = TempDir::new().unwrap().path().join("");
+        let temp_kubeconfig = temp_kubeconfig_dir.join("config");
+
+        fs::create_dir_all(&temp_kubeconfig_dir).unwrap();
+        fs::write(&temp_kubeconfig, "test-content").unwrap();
+
+        let cache_file = config
+            .get_version_cache_file(temp_kubeconfig.to_str().unwrap())
+            .unwrap();
+        assert!(cache_file.starts_with(&config.korrect_path.join("cache")));
+    }
+
+    #[test]
+    fn test_download_kubectl() {
+        let (_temp_dir, _) = setup_temp_home();
+        let config = KorrectConfig::new(false).unwrap();
+
+        // Test downloading a specific version
+        let version = "v1.23.0";
+        let result = config.download_kubectl(version);
+        assert!(result.is_ok());
+
+        let target_path = config.korrect_bin_path.join(format!("kubectl-{}", version));
+        assert!(target_path.exists());
+    }
+
+    #[test]
+    fn test_get_current_stable_version() {
+        let (_temp_dir, _) = setup_temp_home();
+        let config = KorrectConfig::new(false).unwrap();
+
+        let version = config.get_current_stable_version();
+        assert!(version.is_ok());
+        let version_str = version.unwrap();
+        assert!(version_str.starts_with('v'));
+        assert!(Regex::new(r"v\d+\.\d+\.\d+")
+            .unwrap()
+            .is_match(&version_str));
+    }
+
+    #[test]
+    fn test_get_server_version_with_cache() {
+        let (_temp_dir, _) = setup_temp_home();
+        let config = KorrectConfig::new(false).unwrap();
+
+        // Create a cached version
+        let cache_file = config.get_version_cache_file("test-config").unwrap();
+        fs::write(&cache_file, "v1.23.0").unwrap();
+
+        let version = config.get_server_version(Some("test-config")).unwrap();
+        assert_eq!(version, "v1.23.0");
+    }
+
+    #[test]
+    fn test_download_file_with_progress() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test-file");
+
+        let url = "http://localhost:8080/release/stable.txt";
+        let result = download_file_with_progress(url, &output_path);
+
+        assert!(result.is_ok());
+        assert!(output_path.exists());
+        assert!(output_path.metadata().unwrap().len() > 0);
+    }
 }

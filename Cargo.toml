@@ -26,3 +26,7 @@ serde_json = "1.0.133"
 sha2 = "0.10.8"
 simple_logger = "2.2.0"
 tempfile = "3.14.0"
+
+[dev-dependencies]
+mockall = "0.13.1"
+tempfile = "3.14.0"
