@@ -5,43 +5,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::{env, fs};
 
-// fn setup() -> anyhow::Result<()> {
-//     let home = env::var("HOME").context("Could not find home directory")?;
-//     let korrect_dir = Path::new(&home).join(".korrect");
-//     let bin_dir = korrect_dir.join("bin");
-
-//     // Create directories if they don't exist
-//     fs::create_dir_all(&bin_dir)?;
-
-//     // Get the path to the current executable
-//     let current_exe = std::env::current_exe()?;
-//     let current_dir = current_exe
-//         .parent()
-//         .ok_or_else(|| anyhow::anyhow!("Could not get parent directory"))?;
-
-//     // Copy korrect-shim to ~/.korrect/bin
-//     let shim_source = current_dir.join("korrect-shim");
-//     let shim_dest = bin_dir.join("kubectl-shim");
-//     fs::copy(&shim_source, &shim_dest)?;
-
-//     std::os::unix::fs::symlink(&shim_dest, bin_dir.join("kubectl"))?;
-//     std::os::unix::fs::symlink(&shim_dest, bin_dir.join("k"))?;
-
-//     // Set executable permissions (rwxr-xr-x)
-//     let mut perms = fs::metadata(&shim_dest)?.permissions();
-//     perms.set_mode(0o755);
-//     fs::set_permissions(&shim_dest, perms)?;
-
-//     println!(
-//         "Successfully installed korrect-shim to {}",
-//         shim_dest.display()
-//     );
-//     println!("Please add {:?} to your PATH", bin_dir);
-//     println!("export PATH={:?}:$PATH", bin_dir);
-
-//     Ok(())
-// }
-
 fn setup(auto_download: bool, force: bool, uninstall: bool) -> anyhow::Result<()> {
     let home = env::var("HOME").context("Could not find home directory")?;
     let korrect_dir = Path::new(&home).join(".korrect");
@@ -130,7 +93,6 @@ fn list() -> anyhow::Result<()> {
     Ok(())
 }
 
-// augment the `setup` command to take the boolean `auto-download` `force`​ and `uninstall` and modify the `setup()` method to take these args
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -152,7 +114,6 @@ fn main() -> anyhow::Result<()> {
         _ => {
             Cli::command().print_help()?;
             println!();
-            // Continue with normal kubectl wrapper functionality
         }
     }
 

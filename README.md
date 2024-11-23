@@ -11,7 +11,7 @@ Witness the miracle of never again needlessly being admonished: `version differe
 - Shell completion support for various shells (bash, zsh, fish)
 - Low performance overhead via caching based on kubeconfig content
 - Supports common kubectl aliases (`k` and `kubectl`)
-- Can uninstall itself: Satisfaction guaranteed or just calle `korrect setup --uninstall`.
+- Can uninstall itself: Satisfaction guaranteed or just call `korrect setup --uninstall`.
 
 ## Installation
 
