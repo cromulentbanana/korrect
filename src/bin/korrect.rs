@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{CommandFactory, Parser};
-use korrect::cli::{Cli, Commands};
+use korrect::cli::{generate_completions, Cli, Commands};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::{env, fs};
@@ -63,15 +63,34 @@ fn list() -> anyhow::Result<()> {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    // match cli.command {
+    //     Some(Commands::Setup) => setup()?,
+    //     Some(Commands::List) => list()?,
+    //     Some(Commands::Completions) => {
+    //         println!("Shell completions not yet implemented");
+    //     }
+    //     None => {
+    //         Cli::command().print_help()?;
+    //         println!();
+    //     }
+    // }
+
     match cli.command {
-        Some(Commands::Setup) => setup()?,
-        Some(Commands::List) => list()?,
-        Some(Commands::Completions) => {
-            println!("Shell completions not yet implemented");
+        Some(Commands::Completions { shell }) => {
+            generate_completions(shell)?;
         }
-        None => {
+        Some(Commands::Setup) => {
+            // Handle setup command
+            setup()?;
+        }
+        Some(Commands::List) => {
+            // Handle list command
+            list()?;
+        }
+        _ => {
             Cli::command().print_help()?;
             println!();
+            // Continue with normal kubectl wrapper functionality
         }
     }
 
