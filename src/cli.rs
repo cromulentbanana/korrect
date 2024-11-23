@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use std::io::{stdout, Error};
 
@@ -14,18 +14,31 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
-// Modify your Commands enum to add completions support:
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Setup korrect-shim in ~/.korrect/bin
-    Setup,
-    /// Generate shell completions
+    #[clap(about = "Generates shell completions")]
     Completions {
         #[arg(value_enum)]
         #[arg(help = "Shell to generate completions for")]
+        // shell: clap_complete::Shell,
         shell: Option<Shell>,
     },
-    /// List installed components
+    #[clap(group(ArgGroup::new("exclusive_flags")
+        .args(&["force", "uninstall"])
+        .required(false)))]
+    #[clap(about = "Installs the korrect-shim and creates the cache")]
+    Setup {
+        #[clap(long, default_value = "false")]
+        #[clap(help = "Automatically download versions of kubectl when needed")]
+        auto_download: bool,
+        #[clap(long, default_value = "false", group = "exclusive_flags")]
+        #[clap(help = "Overwrite existing korrect installed files")]
+        force: bool,
+        #[clap(long, default_value = "false", group = "exclusive_flags")]
+        #[clap(help = "Remove all korrect installed files")]
+        uninstall: bool,
+    },
+    #[clap(about = "Lists the installed components")]
     List,
 }
 
