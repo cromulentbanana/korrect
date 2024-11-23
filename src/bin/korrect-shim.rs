@@ -55,6 +55,14 @@ impl KorrectConfig {
 
         let cache_file = self.get_version_cache_file(&kubeconfig)?;
 
+        if self.debug {
+            println!(
+                "cache_file for kubeconfig [{}] is [{:#?}].",
+                &kubeconfig,
+                &cache_file.to_str()
+            );
+        }
+
         // Try reading from cache first
         if let Ok(cached_version) = fs::read_to_string(&cache_file) {
             return Ok(cached_version.trim().to_string());
@@ -91,6 +99,9 @@ impl KorrectConfig {
 
     fn get_version_cache_file(&self, kubeconfig: &str) -> Result<PathBuf> {
         let mut hasher = Sha256::new();
+
+        // TODO: Try taking the hash of the contents of the kubeconfig file, not the filename. This way we can map multiple different versions to the same file as long as the contents of that file changes.
+
         hasher.update(kubeconfig.as_bytes());
         let hash = format!("{:x}", hasher.finalize())[..5].to_string();
         Ok(self.korrect_path.join("cache").join(hash))
