@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 struct KorrectConfig {
     korrect_path: PathBuf,
     korrect_bin_path: PathBuf,
+    dl_url: String,
     os: String,
     cpu_arch: String,
     debug: bool,
@@ -23,6 +24,7 @@ struct KorrectConfig {
 impl KorrectConfig {
     fn new(debug: bool) -> Result<Self> {
         let home = env::var("HOME")?;
+        let dl_url = env::var("KORRECT_BASE_URL").unwrap_or("https://dl.k8s.io".to_owned());
         let korrect_path = Path::new(&home).join(".korrect");
         let korrect_bin_path = korrect_path.join("bin");
         fs::create_dir_all(&korrect_bin_path)?;
@@ -37,10 +39,11 @@ impl KorrectConfig {
             os,
             cpu_arch,
             debug,
+            dl_url,
         })
     }
-    fn get_current_stable_version() -> Result<String> {
-        let resp = reqwest::blocking::get("https://dl.k8s.io/release/stable.txt")?;
+    fn get_current_stable_version(&self) -> Result<String> {
+        let resp = reqwest::blocking::get(format!("{}/release/stable.txt", self.dl_url))?;
         resp.text().map_err(|e| anyhow::anyhow!(e))
     }
 
@@ -59,7 +62,7 @@ impl KorrectConfig {
         }
 
         // Fetch known version if no cached version
-        let current_stable_version = Self::get_current_stable_version()?;
+        let current_stable_version = self.get_current_stable_version()?;
         let local_kubectl = self
             .korrect_bin_path
             .join(format!("kubectl-{}", current_stable_version));
@@ -103,8 +106,8 @@ impl KorrectConfig {
         }
 
         let url = format!(
-            "https://dl.k8s.io/release/{}/bin/{}/{}/kubectl",
-            version, self.os, self.cpu_arch
+            "{}/release/{}/bin/{}/{}/kubectl",
+            self.dl_url, version, self.os, self.cpu_arch
         );
 
         // let resp = reqwest::blocking::get(&url)?;
@@ -123,7 +126,7 @@ impl KorrectConfig {
         }
 
         // Ensure the latest stable kubectl is downloaded
-        let known_version = Self::get_current_stable_version()?;
+        let known_version = self.get_current_stable_version()?;
         let _known_kubectl = self.download_kubectl(&known_version)?;
 
         // Get server version
