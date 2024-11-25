@@ -122,12 +122,7 @@ impl KorrectConfig {
             self.dl_url, version, self.os, self.cpu_arch
         );
 
-        // let resp = reqwest::blocking::get(&url)?;
-        // let mut dest = File::create(&target_path)?;
-        // dest.write_all(&resp.bytes()?)?;
-
         download_file_with_progress(&url, &target_path).context("Failed to download file")?;
-        // Make executable
 
         Ok(target_path)
     }
@@ -413,14 +408,30 @@ mod tests {
 
     #[test]
     fn test_download_file_with_progress() {
+        use std::thread;
+        use tiny_http::{Response, Server};
+        let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
+        let server_addr = server.server_addr();
+        let test_file_content = b"v1.3.0";
+
+        let server_handle = thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let response = Response::from_data(test_file_content);
+                request.respond(response).unwrap();
+            }
+        });
+
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test-file");
 
-        let url = "http://localhost:8080/release/stable.txt";
-        let result = download_file_with_progress(url, &output_path);
+        let url = format!("http://{server_addr}/test-file");
+        let result = download_file_with_progress(&url, &output_path);
 
         assert!(result.is_ok());
         assert!(output_path.exists());
-        assert!(output_path.metadata().unwrap().len() > 0);
+        assert_eq!(std::fs::read(&output_path).unwrap(), test_file_content);
+
+        // Shut down the server
+        server_handle.join().unwrap();
     }
 }
