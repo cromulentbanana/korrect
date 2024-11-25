@@ -262,6 +262,8 @@ mod tests {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
+
+    use mockito;
     use tempfile::TempDir;
 
     // Helper function to create a temporary home directory
@@ -347,22 +349,22 @@ mod tests {
 
     #[test]
     fn test_download_kubectl() {
-        use std::thread;
-        use tiny_http::{Response, Server};
-
         let (_temp_dir, _) = setup_temp_home();
 
-        let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
-        let server_addr = server.server_addr();
-        env::set_var("KORRECT_BASE_URL", format!("http://{server_addr}"));
+        let mut server = mockito::Server::new();
+        let url = server.url();
         let test_file_content = b"A bunch of bytes";
-        let server_handle = thread::spawn(move || {
-            for request in server.incoming_requests() {
-                let response = Response::from_data(test_file_content);
-                request.respond(response).unwrap();
-            }
-        });
 
+        server
+            .mock("GET", "/test-file")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            .with_header("x-api-key", "1234")
+            .with_body(test_file_content)
+            .create();
+        // let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
+        // let server_addr = server.server_addr();
+        env::set_var("KORRECT_BASE_URL", url);
         let config = KorrectConfig::new(false).unwrap();
 
         // Test downloading a specific version
@@ -404,23 +406,22 @@ mod tests {
 
     #[test]
     fn test_download_file_with_progress() {
-        use std::thread;
-        use tiny_http::{Response, Server};
-        let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
-        let server_addr = server.server_addr();
+        let mut server = mockito::Server::new();
+        let url = server.url();
         let test_file_content = b"v1.3.0";
 
-        let server_handle = thread::spawn(move || {
-            for request in server.incoming_requests() {
-                let response = Response::from_data(test_file_content);
-                request.respond(response).unwrap();
-            }
-        });
+        server
+            .mock("GET", "/test-file")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            .with_header("x-api-key", "1234")
+            .with_body(test_file_content)
+            .create();
 
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test-file");
 
-        let url = format!("http://{server_addr}/test-file");
+        let url = format!("{url}/test-file");
         let result = download_file_with_progress(&url, &output_path);
 
         assert!(result.is_ok());
