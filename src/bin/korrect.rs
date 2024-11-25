@@ -1,13 +1,16 @@
 use anyhow::Context;
 use clap::{CommandFactory, Parser};
+use dirs;
 use korrect::cli::{generate_completions, Cli, Commands};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::{env, fs};
 
 fn setup(auto_download: bool, force: bool, uninstall: bool) -> anyhow::Result<()> {
-    let home = env::var("HOME").context("Could not find home directory")?;
-    let korrect_dir = Path::new(&home).join(".korrect");
+    let home_dir = dirs::home_dir().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")
+    })?;
+    let korrect_dir = home_dir.join(".korrect");
     let bin_dir = korrect_dir.join("bin");
 
     if uninstall {

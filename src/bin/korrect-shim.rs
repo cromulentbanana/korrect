@@ -1,10 +1,11 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Error, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{anyhow, Context, Result};
+use dirs;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use reqwest::blocking::Client;
@@ -22,13 +23,20 @@ struct KorrectConfig {
 
 impl KorrectConfig {
     fn new(debug: bool) -> Result<Self> {
-        let home = env::var("HOME")?;
         let dl_url = env::var("KORRECT_BASE_URL").unwrap_or("https://dl.k8s.io".to_owned());
-        let korrect_path = Path::new(&home).join(".korrect");
-        let korrect_bin_path = korrect_path.join("bin");
-        let korrect_cache_path = korrect_path.join("cache");
-        fs::create_dir_all(&korrect_bin_path)?;
-        fs::create_dir_all(&korrect_cache_path)?;
+        let home_dir = dirs::home_dir().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")
+        })?;
+        let config_dir: PathBuf = dirs::config_dir().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "Config directory not found")
+        })?;
+        let cache_dir: PathBuf = dirs::cache_dir().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "Cache directory not found")
+        })?;
+        let korrect_config_dir_path = config_dir.join("korrect");
+        let korrect_cache_dir_path = cache_dir.join("korrect");
+        fs::create_dir_all(&korrect_config_dir_path)?;
+        fs::create_dir_all(&korrect_cache_dir_path)?;
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
