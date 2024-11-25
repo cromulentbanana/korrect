@@ -15,31 +15,53 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone, Copy)]
 pub enum Commands {
     #[clap(about = "Generates shell completions")]
+    #[command(arg_required_else_help = true)]
     Completions {
         #[arg(value_enum)]
-        #[arg(help = "Shell to generate completions for")]
+        #[arg(help = "Generates shell completion scripts")]
         shell: Option<Shell>,
+
+        #[arg(long, short, hide = true)]
+        help: bool,
     },
-    // ... rest of the Commands enum remains the same ...
+    #[clap(group(ArgGroup::new("exclusive_flags")
+        .args(&["force", "uninstall"])
+        .required(false)))]
+    #[clap(about = "Installs the korrect-shim and creates the cache")]
+    Setup {
+        #[clap(long, default_value = "false")]
+        #[clap(help = "Automatically download versions of kubectl when needed")]
+        auto_download: bool,
+        #[clap(long, default_value = "false", group = "exclusive_flags")]
+        #[clap(help = "Overwrite existing korrect installed files")]
+        force: bool,
+        #[clap(long, default_value = "false", group = "exclusive_flags")]
+        #[clap(help = "Remove all korrect installed files")]
+        uninstall: bool,
+    },
+    #[clap(about = "Lists the installed components")]
+    List,
 }
 
-pub fn generate_completions(shell: Option<Shell>) -> Result<(), Error> {
+pub fn generate_completions(shell: Option<Shell>, help: bool) -> Result<(), Error> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     match shell {
         Some(shell_type) => {
-            if cmd.get_matches().get_flag("help") {
+            if help {
                 print_shell_specific_instructions(&bin_name, shell_type);
             } else {
                 generate(shell_type, &mut cmd, "korrect", &mut stdout());
             }
         }
         None => {
-            println!("\nTo install completions:");
-            print_installation_instructions(&bin_name);
+            cmd.render_help();
+            cmd.find_subcommand_mut("completions")
+                .unwrap()
+                .print_help()?;
         }
     }
 
@@ -54,7 +76,6 @@ fn print_shell_specific_instructions(bin_name: &str, shell: Shell) {
 
     match shell {
         Shell::Bash => {
-            println!("Bash:");
             println!("  # Create completions directory");
             println!("  mkdir -p ~/.bash_completion.d");
             println!("  # Generate and save completions");
@@ -71,7 +92,6 @@ fn print_shell_specific_instructions(bin_name: &str, shell: Shell) {
             println!("  source ~/.bashrc");
         }
         Shell::Zsh => {
-            println!("Zsh:");
             println!("  # Create completions directory");
             println!("  mkdir -p ~/.zsh/completion");
             println!("  # Generate and save completions");
@@ -86,7 +106,6 @@ fn print_shell_specific_instructions(bin_name: &str, shell: Shell) {
             println!("  source ~/.zshrc");
         }
         Shell::Fish => {
-            println!("Fish:");
             println!("  # Create completions directory");
             println!("  mkdir -p ~/.config/fish/completions");
             println!("  # Generate and save completions");
@@ -111,10 +130,6 @@ fn print_shell_specific_instructions(bin_name: &str, shell: Shell) {
         }
         _ => {
             println!("Shell-specific instructions not available for this shell.");
-            println!(
-                "You can generate completions to stdout and redirect them wherever you prefer:"
-            );
-            println!("  {} completions <shell>", bin_name);
         }
     }
 }
