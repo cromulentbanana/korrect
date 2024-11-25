@@ -1,6 +1,30 @@
 use clap::{builder::styling, ArgGroup, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+use clap_complete_nushell::Nushell;
 use std::io::{stdout, Error};
+
+#[derive(clap::ValueEnum, Clone, Copy)]
+pub enum ShellType {
+    Bash,
+    Elvish,
+    Fish,
+    Nushell,
+    Powershell,
+    Zsh,
+}
+
+impl std::fmt::Display for ShellType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShellType::Bash => write!(f, "bash"),
+            ShellType::Zsh => write!(f, "zsh"),
+            ShellType::Fish => write!(f, "fish"),
+            ShellType::Elvish => write!(f, "elvish"),
+            ShellType::Nushell => write!(f, "nushell"),
+            ShellType::Powershell => write!(f, "powershell"),
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -15,14 +39,17 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone, Copy)]
 pub enum Commands {
     #[clap(about = "Generates shell completions")]
+    #[command(arg_required_else_help = true)]
     Completions {
         #[arg(value_enum)]
-        #[arg(help = "Shell to generate completions for")]
-        // shell: clap_complete::Shell,
-        shell: Option<Shell>,
+        #[arg(help = "Generates shell completion scripts")]
+        shell: Option<ShellType>,
+
+        #[arg(long, short, hide = true)]
+        help: bool,
     },
     #[clap(group(ArgGroup::new("exclusive_flags")
         .args(&["force", "uninstall"])
@@ -43,102 +70,103 @@ pub enum Commands {
     List,
 }
 
-pub fn generate_completions(shell: Option<Shell>) -> Result<(), Error> {
+pub fn generate_completions(shell: Option<ShellType>, help: bool) -> Result<(), Error> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     match shell {
-        Some(Shell::Bash) => {
-            generate(
-                clap_complete::Shell::Bash,
-                &mut cmd,
-                "korrect",
-                &mut stdout(),
-            );
+        Some(shell_type) => {
+            if help {
+                print_shell_specific_instructions(&bin_name, shell_type);
+            } else {
+                match shell_type {
+                    ShellType::Bash => generate(Shell::Bash, &mut cmd, "korrect", &mut stdout()),
+                    ShellType::Zsh => generate(Shell::Zsh, &mut cmd, "korrect", &mut stdout()),
+                    ShellType::Fish => generate(Shell::Fish, &mut cmd, "korrect", &mut stdout()),
+                    ShellType::Powershell => {
+                        generate(Shell::PowerShell, &mut cmd, "korrect", &mut stdout())
+                    }
+                    ShellType::Elvish => {
+                        generate(Shell::Elvish, &mut cmd, "korrect", &mut stdout())
+                    }
+                    ShellType::Nushell => generate(Nushell, &mut cmd, "korrect", &mut stdout()),
+                }
+            }
         }
-        Some(Shell::Zsh) => {
-            generate(
-                clap_complete::Shell::Zsh,
-                &mut cmd,
-                "korrect",
-                &mut stdout(),
-            );
-        }
-        Some(Shell::Elvish) => {
-            generate(
-                clap_complete::Shell::Elvish,
-                &mut cmd,
-                "korrect",
-                &mut stdout(),
-            );
-        }
-        Some(Shell::Fish) => {
-            generate(
-                clap_complete::Shell::Fish,
-                &mut cmd,
-                "korrect",
-                &mut stdout(),
-            );
-        }
-        _ => {
-            println!("Shell not recognized {:?}", shell);
-            println!("\nTo install completions:");
-            print_installation_instructions(&bin_name);
+        None => {
+            cmd.render_help();
+            cmd.find_subcommand_mut("completions")
+                .unwrap()
+                .print_help()?;
         }
     }
 
     Ok(())
 }
 
-fn print_installation_instructions(bin_name: &str) {
-    println!("\nTo install completions, run one of the following commands based on your shell:\n");
+fn print_shell_specific_instructions(bin_name: &str, shell: ShellType) {
+    println!(
+        "\nTo install completions for {}, follow these steps:\n",
+        shell
+    );
 
-    println!("Bash:");
-    println!("  # Create completions directory");
-    println!("  mkdir -p ~/.bash_completion.d");
-    println!("  # Generate and save completions");
-    println!(
-        "  {} completions bash > ~/.bash_completion.d/{}.bash",
-        bin_name, bin_name
-    );
-    println!("  # Add to ~/.bashrc (if not already present)");
-    println!(
-        "  echo 'source ~/.bash_completion.d/{}.bash' >> ~/.bashrc",
-        bin_name
-    );
-    println!("  # Reload shell configuration");
-    println!("  source ~/.bashrc");
-
-    println!("\nZsh:");
-    println!("  # Create completions directory");
-    println!("  mkdir -p ~/.zsh/completion");
-    println!("  # Generate and save completions");
-    println!(
-        "  {} completions zsh > ~/.zsh/completion/_{}",
-        bin_name, bin_name
-    );
-    println!("  # Add to ~/.zshrc (if not already present)");
-    println!("  echo 'fpath=(~/.zsh/completion $fpath)' >> ~/.zshrc");
-    println!("  echo 'autoload -U compinit; compinit' >> ~/.zshrc");
-    println!("  # Reload shell configuration");
-    println!("  source ~/.zshrc");
-
-    println!("\nNushell:");
-    println!("  # Create completions directory");
-    println!("  mkdir -p ~/.config/nushell/completions");
-    println!("  # Generate and save completions");
-    println!(
-        "  {} completions nu > ~/.config/nushell/completions/{}.nu",
-        bin_name, bin_name
-    );
-    println!("  # Add to your Nushell config (if not already present)");
-    println!(
-        "  echo 'source ~/.config/nushell/completions/{}.nu' >> ~/.config/nushell/config.nu",
-        bin_name
-    );
-    println!("  # Restart Nushell or reload configuration");
-
-    println!("\nNote: You can also generate completions to stdout and redirect them wherever you prefer:");
-    println!("  {} completions <shell>", bin_name);
+    match shell {
+        ShellType::Bash => {
+            println!("  # Create completions directory");
+            println!("  mkdir -p ~/.bash_completion.d");
+            println!("  # Generate and save completions");
+            println!(
+                "  {} completions bash > ~/.bash_completion.d/{}.bash",
+                bin_name, bin_name
+            );
+            println!("  # Add to ~/.bashrc (if not already present)");
+            println!(
+                "  echo 'source ~/.bash_completion.d/{}.bash' >> ~/.bashrc",
+                bin_name
+            );
+            println!("  # Reload shell configuration");
+            println!("  source ~/.bashrc");
+        }
+        ShellType::Zsh => {
+            println!("  # Create completions directory");
+            println!("  mkdir -p ~/.zsh/completion");
+            println!("  # Generate and save completions");
+            println!(
+                "  {} completions zsh > ~/.zsh/completion/_{}",
+                bin_name, bin_name
+            );
+            println!("  # Add to ~/.zshrc (if not already present)");
+            println!("  echo 'fpath=(~/.zsh/completion $fpath)' >> ~/.zshrc");
+            println!("  echo 'autoload -U compinit; compinit' >> ~/.zshrc");
+            println!("  # Reload shell configuration");
+            println!("  source ~/.zshrc");
+        }
+        ShellType::Fish => {
+            println!("  # Create completions directory");
+            println!("  mkdir -p ~/.config/fish/completions");
+            println!("  # Generate and save completions");
+            println!(
+                "  {} completions fish > ~/.config/fish/completions/{}.fish",
+                bin_name, bin_name
+            );
+            println!("  # Completions will be automatically loaded on next shell start");
+        }
+        ShellType::Elvish => {
+            println!("Elvish:");
+            println!("  # Create completions directory");
+            println!("  mkdir -p ~/.elvish/lib");
+            println!("  # Generate and save completions");
+            println!(
+                "  {} completions elvish > ~/.elvish/lib/{}-completions.elv",
+                bin_name, bin_name
+            );
+            println!("  # Add to ~/.elvish/rc.elv (if not already present)");
+            println!("  echo 'use {}-completions' >> ~/.elvish/rc.elv", bin_name);
+            println!("  # Restart Elvish or reload configuration");
+        }
+        _ => {
+            println!("Shell-specific instructions not available for this shell.");
+        }
+    }
 }
 
 fn styles() -> styling::Styles {

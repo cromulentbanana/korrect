@@ -16,9 +16,17 @@ cache:
 # Variables used across jobs
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  RUST_TARGET_DIR: "${CI_PROJECT_DIR}/target" # Define target directory for caching
   RUST_BACKTRACE: 1
   # Specify targets for cross-compilation
   TARGETS: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc"
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .cargo/registry  # Caches downloaded dependencies
+    - .cargo/git       # Caches cloned dependencies
+    - target           # Caches build artifacts
 
 # Test job that runs on every push
 test:
