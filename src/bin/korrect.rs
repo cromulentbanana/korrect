@@ -97,8 +97,8 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Completions { shell }) => {
-            generate_completions(shell)?;
+        Some(Commands::Completions { shell, help }) => {
+            generate_completions(shell, help)?;
         }
         Some(Commands::Setup {
             auto_download,
