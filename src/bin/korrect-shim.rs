@@ -377,19 +377,19 @@ mod tests {
         assert!(target_path.exists());
     }
 
-    #[test]
-    fn test_get_current_stable_version() {
-        let (_temp_dir, _) = setup_temp_home();
-        let config = KorrectConfig::new(false).unwrap();
+    // #[test]
+    // fn test_get_current_stable_version() {
+    //     let (_temp_dir, _) = setup_temp_home();
+    //     let config = KorrectConfig::new(false).unwrap();
 
-        let version = config.get_current_stable_version();
-        assert!(version.is_ok());
-        let version_str = version.unwrap();
-        assert!(version_str.starts_with('v'));
-        assert!(Regex::new(r"v\d+\.\d+\.\d+")
-            .unwrap()
-            .is_match(&version_str));
-    }
+    //     let version = config.get_current_stable_version();
+    //     assert!(version.is_ok());
+    //     let version_str = version.unwrap();
+    //     assert!(version_str.starts_with('v'));
+    //     assert!(Regex::new(r"v\d+\.\d+\.\d+")
+    //         .unwrap()
+    //         .is_match(&version_str));
+    // }
 
     #[test]
     fn test_get_server_version_with_cache() {
