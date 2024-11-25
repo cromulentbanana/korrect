@@ -229,26 +229,6 @@ fn download_file_with_progress(url: &str, output_path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-// //TODO This should return an error, not an empty string
-// fn normalize_version(version: &str) -> String {
-//     // Define a regex to match the `vX.Y.Z` pattern
-//     let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)").unwrap();
-
-//     // Search for the pattern in the input string
-//     if let Some(captures) = re.captures(version) {
-//         // Construct the normalized version string
-//         format!(
-//             "v{}.{}.{}",
-//             &captures[1], // X
-//             &captures[2], // Y
-//             &captures[3]  // Z
-//         )
-//     } else {
-//         // Return an empty string or handle errors gracefully if no match is found
-//         String::new()
-//     }
-// }
-
 fn normalize_version(version: &str) -> Result<String> {
     // Define a regex to match the `vX.Y.Z` pattern
     let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)")?;
@@ -367,13 +347,29 @@ mod tests {
 
     #[test]
     fn test_download_kubectl() {
+        use std::thread;
+        use tiny_http::{Response, Server};
+
         let (_temp_dir, _) = setup_temp_home();
+
+        let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
+        let server_addr = server.server_addr();
+        env::set_var("KORRECT_BASE_URL", format!("http://{server_addr}"));
+        let test_file_content = b"A bunch of bytes";
+        let server_handle = thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let response = Response::from_data(test_file_content);
+                request.respond(response).unwrap();
+            }
+        });
+
         let config = KorrectConfig::new(false).unwrap();
 
         // Test downloading a specific version
         let version = "v1.23.0";
+
         let result = config.download_kubectl(version);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Test failed: result is {:?}", result);
 
         let target_path = config.korrect_bin_path.join(format!("kubectl-{}", version));
         assert!(target_path.exists());
@@ -430,8 +426,5 @@ mod tests {
         assert!(result.is_ok());
         assert!(output_path.exists());
         assert_eq!(std::fs::read(&output_path).unwrap(), test_file_content);
-
-        // Shut down the server
-        server_handle.join().unwrap();
     }
 }
