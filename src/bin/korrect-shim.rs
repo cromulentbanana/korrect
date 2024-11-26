@@ -12,8 +12,9 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-struct KorrectConfig {
-    korrect_path: PathBuf,
+struct KorrectShimConfig {
+    korrect_config_path: PathBuf,
+    korrect_cache_path: PathBuf,
     korrect_bin_path: PathBuf,
     dl_url: String,
     os: String,
@@ -21,7 +22,7 @@ struct KorrectConfig {
     debug: bool,
 }
 
-impl KorrectConfig {
+impl KorrectShimConfig {
     fn new(debug: bool) -> Result<Self> {
         let dl_url = env::var("KORRECT_BASE_URL").unwrap_or("https://dl.k8s.io".to_owned());
         let home_dir = dirs::home_dir().ok_or_else(|| {
@@ -33,16 +34,19 @@ impl KorrectConfig {
         let cache_dir: PathBuf = dirs::cache_dir().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::NotFound, "Cache directory not found")
         })?;
-        let korrect_config_dir_path = config_dir.join("korrect");
-        let korrect_cache_dir_path = cache_dir.join("korrect");
-        fs::create_dir_all(&korrect_config_dir_path)?;
-        fs::create_dir_all(&korrect_cache_dir_path)?;
+        let korrect_config_path = config_dir.join("korrect");
+        let korrect_cache_path = cache_dir.join("korrect");
+        let korrect_bin_path = home_dir.join(".korrect").join("bin");
+
+        fs::create_dir_all(&korrect_cache_path).ok();
+        fs::create_dir_all(&korrect_bin_path).ok();
 
         let os = detect_os();
         let cpu_arch = detect_cpu_arch();
 
         Ok(Self {
-            korrect_path,
+            korrect_config_path,
+            korrect_cache_path,
             korrect_bin_path,
             os,
             cpu_arch,
@@ -115,7 +119,7 @@ impl KorrectConfig {
         }
         hasher.update(contents.as_bytes());
         let hash = format!("{:x}", hasher.finalize())[..5].to_string();
-        Ok(self.korrect_path.join("cache").join(hash))
+        Ok(self.korrect_cache_path.join(hash))
     }
 
     fn download_kubectl(&self, version: &str) -> Result<PathBuf> {
@@ -260,12 +264,12 @@ fn normalize_version(version: &str) -> Result<String> {
 
 fn main() -> Result<()> {
     let debug = env::var("DEBUG").map_or(false, |v| v == "true");
-    let config = KorrectConfig::new(debug)?;
+    let config = KorrectShimConfig::new(debug)?;
     config.run()
 }
 
 #[cfg(test)]
-mod tests {
+mod korrect_shim_tests {
     use super::*;
     use std::env;
     use std::fs;
@@ -282,22 +286,8 @@ mod tests {
         (temp_dir, temp_home)
     }
 
-    #[test]
-    fn test_korrect_config_new() {
-        let (_temp_dir, temp_home) = setup_temp_home();
-
-        let config = KorrectConfig::new(false).unwrap();
-
-        assert_eq!(
-            config.korrect_path,
-            PathBuf::from(&temp_home).join(".korrect")
-        );
-        assert_eq!(
-            config.korrect_bin_path,
-            PathBuf::from(&temp_home).join(".korrect").join("bin")
-        );
-        assert!(config.korrect_path.exists());
-        assert!(config.korrect_bin_path.exists());
+    fn remove_temp_home(dir: TempDir) {
+        fs::remove_dir_all(dir).ok();
     }
 
     #[test]
@@ -339,8 +329,8 @@ mod tests {
 
     #[test]
     fn test_get_version_cache_file() {
-        let (_temp_dir, _) = setup_temp_home();
-        let config = KorrectConfig::new(false).unwrap();
+        let (temp_dir, _) = setup_temp_home();
+        let config = KorrectShimConfig::new(false).unwrap();
 
         // Create a temporary kubeconfig file
         let temp_kubeconfig_dir = TempDir::new().unwrap().path().join("");
@@ -352,12 +342,14 @@ mod tests {
         let cache_file = config
             .get_version_cache_file(temp_kubeconfig.to_str().unwrap())
             .unwrap();
-        assert!(cache_file.starts_with(config.korrect_path.join("cache")));
+        assert!(cache_file.starts_with(config.korrect_cache_path));
+
+        remove_temp_home(temp_dir);
     }
 
     #[test]
     fn test_download_kubectl() {
-        let (_temp_dir, _) = setup_temp_home();
+        let (temp_dir, _) = setup_temp_home();
 
         let mut server = mockito::Server::new();
         let url = server.url();
@@ -370,10 +362,9 @@ mod tests {
             .with_header("x-api-key", "1234")
             .with_body(test_file_content)
             .create();
-        // let server = Server::http("127.0.0.1:0").unwrap(); // Use a random available port
-        // let server_addr = server.server_addr();
+
         env::set_var("KORRECT_BASE_URL", url);
-        let config = KorrectConfig::new(false).unwrap();
+        let config = KorrectShimConfig::new(false).unwrap();
 
         // Test downloading a specific version
         let version = "v1.23.0";
@@ -383,26 +374,30 @@ mod tests {
 
         let target_path = config.korrect_bin_path.join(format!("kubectl-{}", version));
         assert!(target_path.exists());
+
+        remove_temp_home(temp_dir);
     }
 
-    // #[test]
-    // fn test_get_current_stable_version() {
-    //     let (_temp_dir, _) = setup_temp_home();
-    //     let config = KorrectConfig::new(false).unwrap();
+    #[test]
+    fn test_get_current_stable_version() {
+        let (temp_dir, _) = setup_temp_home();
+        let config = KorrectShimConfig::new(false).unwrap();
 
-    //     let version = config.get_current_stable_version();
-    //     assert!(version.is_ok());
-    //     let version_str = version.unwrap();
-    //     assert!(version_str.starts_with('v'));
-    //     assert!(Regex::new(r"v\d+\.\d+\.\d+")
-    //         .unwrap()
-    //         .is_match(&version_str));
-    // }
+        let version = config.get_current_stable_version();
+        assert!(version.is_ok());
+        let version_str = version.unwrap();
+        assert!(version_str.starts_with('v'));
+        assert!(Regex::new(r"v\d+\.\d+\.\d+")
+            .unwrap()
+            .is_match(&version_str));
+
+        remove_temp_home(temp_dir);
+    }
 
     #[test]
     fn test_get_server_version_with_cache() {
-        let (_temp_dir, _) = setup_temp_home();
-        let config = KorrectConfig::new(false).unwrap();
+        let (temp_dir, _) = setup_temp_home();
+        let config = KorrectShimConfig::new(false).unwrap();
 
         // Create a cached version
         let cache_file = config.get_version_cache_file("test-config").unwrap();
@@ -410,6 +405,8 @@ mod tests {
 
         let version = config.get_server_version(Some("test-config")).unwrap();
         assert_eq!(version, "v1.23.0");
+
+        remove_temp_home(temp_dir);
     }
 
     #[test]
