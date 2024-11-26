@@ -272,9 +272,7 @@ mod korrect_shim_tests {
     use super::*;
     use std::env;
     use std::fs;
-    
 
-    
     use tempfile::TempDir;
 
     // Helper function to create a temporary home directory
@@ -358,7 +356,6 @@ mod korrect_shim_tests {
             .mock("GET", "/test-file")
             .with_status(200)
             .with_header("content-type", "text/plain")
-            .with_header("x-api-key", "1234")
             .with_body(test_file_content)
             .create();
 
@@ -380,6 +377,19 @@ mod korrect_shim_tests {
     #[test]
     fn test_get_current_stable_version() {
         let (temp_dir, _) = setup_temp_home();
+
+        let mut server = mockito::Server::new();
+        let url = server.url();
+        let test_file_content = b"v1.2.3";
+
+        server
+            .mock("GET", "/release/stable.txt")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            .with_body(test_file_content)
+            .create();
+
+        env::set_var("KORRECT_BASE_URL", url);
         let config = KorrectShimConfig::new(false).unwrap();
 
         let version = config.get_current_stable_version();
