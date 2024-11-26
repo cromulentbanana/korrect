@@ -1,6 +1,6 @@
 [package]
 name = "korrect"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["dan@badpacket.in"]
 edition = "2021"
 description = "A kubectl version managing shim that invokes the correct kubectl version ☸ "
