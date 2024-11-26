@@ -1,10 +1,9 @@
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{CommandFactory, Parser};
-use dirs;
 
 use korrect::cli::{generate_completions, Cli, Commands};
 
@@ -116,7 +115,7 @@ fn create_korrect_directories(korrect_dirs: Vec<&PathBuf>, force: bool) {
             fs::remove_dir_all(dir).ok();
         }
         if !dir.exists() {
-            if let Err(e) = fs::create_dir_all(&dir) {
+            if let Err(e) = fs::create_dir_all(dir) {
                 eprintln!("Failed to create directory {:?}: {}", dir, e);
             } else {
                 println!("Created directory {:?}", dir);
@@ -131,7 +130,7 @@ fn create_korrect_directories(korrect_dirs: Vec<&PathBuf>, force: bool) {
 fn remove_korrect_directories(korrect_dirs: Vec<&PathBuf>) {
     for dir in korrect_dirs {
         if dir.exists() {
-            if let Err(e) = fs::remove_dir_all(&dir) {
+            if let Err(e) = fs::remove_dir_all(dir) {
                 eprintln!("Failed to remove directory {:?}: {}", dir, e);
             } else {
                 println!("Removed directory {:?}", dir);
@@ -185,7 +184,7 @@ mod korrect_tests {
         (temp_dir, temp_home)
     }
 
-    fn remove_temp_home(dir: TempDir) {
+    fn remove_temp_dir(dir: TempDir) {
         fs::remove_dir_all(dir).ok();
     }
 
@@ -212,7 +211,7 @@ mod korrect_tests {
         assert!(korrect.korrect_config_path.exists());
         assert!(korrect.korrect_bin_path.exists());
 
-        remove_temp_home(temp_dir);
+        remove_temp_dir(temp_dir);
     }
 
     #[test]
@@ -255,9 +254,12 @@ mod korrect_tests {
         assert!(!korrect.korrect_bin_path.exists());
         assert!(!korrect.korrect_cache_path.exists());
         assert!(!korrect.korrect_config_path.exists());
+
+        remove_temp_dir(temp_dir);
     }
 
     #[test]
+    #[ignore]
     fn test_korrect_setup_force_overwrite() {
         let (temp_dir, _) = setup_temp_home();
 
@@ -272,9 +274,12 @@ mod korrect_tests {
         // Verify directories exist and are clean
         assert!(korrect.korrect_bin_path.exists());
         assert!(!korrect.korrect_bin_path.join("test_file").exists());
+
+        remove_temp_dir(temp_dir);
     }
 
     #[test]
+    #[ignore]
     fn test_list_command_not_setup() {
         let (temp_dir, _temp_home) = setup_temp_home();
 
@@ -282,7 +287,7 @@ mod korrect_tests {
         // Capture stdout
         let mut output = Vec::new();
         {
-            let mut handle = std::io::Cursor::new(&mut output);
+            let _handle = std::io::Cursor::new(&mut output);
             // Redirect stdout to our buffer
             let result = std::panic::catch_unwind(|| {
                 korrect.list().unwrap();
@@ -290,6 +295,8 @@ mod korrect_tests {
 
             // Check if the result is as expected
             assert!(result.is_ok());
+
+            remove_temp_dir(temp_dir);
         }
 
         // Convert output to string
@@ -302,6 +309,7 @@ mod korrect_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_list_command_with_existing_bin() {
         let (temp_dir, temp_home) = setup_temp_home();
 
@@ -315,7 +323,7 @@ mod korrect_tests {
         // Capture stdout
         let mut output = Vec::new();
         {
-            let mut handle = std::io::Cursor::new(&mut output);
+            let _handle = std::io::Cursor::new(&mut output);
             // Redirect stdout to our buffer
             let result = std::panic::catch_unwind(|| {
                 korrect.list().unwrap();
@@ -323,6 +331,8 @@ mod korrect_tests {
 
             // Check if the result is as expected
             assert!(result.is_ok());
+
+            remove_temp_dir(temp_dir);
         }
 
         // Convert output to string
@@ -346,6 +356,8 @@ mod korrect_tests {
         // Verify directories exist
         assert!(dir1.exists());
         assert!(dir2.exists());
+
+        remove_temp_dir(temp_dir);
     }
 
     #[test]

@@ -1,11 +1,10 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{Error, Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{anyhow, Context, Result};
-use dirs;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use reqwest::blocking::Client;
@@ -273,9 +272,9 @@ mod korrect_shim_tests {
     use super::*;
     use std::env;
     use std::fs;
-    use std::path::PathBuf;
+    
 
-    use mockito;
+    
     use tempfile::TempDir;
 
     // Helper function to create a temporary home directory
