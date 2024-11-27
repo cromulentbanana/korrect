@@ -79,10 +79,10 @@ korrect setup --auto-download
 After installation, korrect creates the following directory structure:
 
 ```
-~/.korrect/
-├─ cache/              # The contents of the active kubeconfig are hashed to reference
+~/
+├──.cache/korrect/     # The contents of the active kubeconfig are hashed to reference
 ├                      # the version-specific kubectl belonging to it 
-└── bin/
+└──.korrect/bin/
     ├── k              # Symlink to kubectl-shim
     ├── kubectl        # Symlink to kubectl-shim
     ├── kubectl-shim   # The executable which dispatches specific kubectl versions
@@ -92,7 +92,7 @@ After installation, korrect creates the following directory structure:
 
 ## Configuration
 
-Coming Soon: Configuration files can be placed in `~/.korrect.toml`. Example configuration:
+Coming Soon: Configuration files can be placed in `~/.config/korrect/config.toml`. Example configuration:
 
 ```toml
 [korrect]

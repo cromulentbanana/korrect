@@ -44,7 +44,7 @@ build:
     - test
   script:
     # Install cross-compilation tools
-    - apt-get update && apt-get install -y musl-tools
+    - apt-get update && apt-get install -y musl-tools libssl-dev
     - rustup target add x86_64-unknown-linux-musl
     - rustup target add aarch64-unknown-linux-musl
     

@@ -1,6 +1,6 @@
 [package]
 name = "korrect"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["dan@badpacket.in"]
 edition = "2021"
 description = "A kubectl version managing shim that invokes the correct kubectl version ☸ "
@@ -20,6 +20,7 @@ anyhow = "^1.0.58"
 clap = { version = "4.5.21", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.5.38"
 clap_complete_nushell = "4.5.4"
+dirs = "5.0.1"
 indicatif = "0.17.9"
 log = "0.4.14"
 regex = "1.11.1"
