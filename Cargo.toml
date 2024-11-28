@@ -1,11 +1,17 @@
 [package]
 name = "korrect"
-version = "0.0.0"
+version = "0.0.1"
 authors = ["dan@badpacket.in"]
 license = "MIT"
 edition = "2021"
+repository = "https://gitlab.com/cromulentbanana/korrect/"
 description = "A kubectl version managing shim that invokes the correct kubectl version ☸ "
 keywords = ["k8s", "kubectl"]
+include = [ 
+  "**/*.rs",
+  "Cargo.toml",
+  "Cargo.lock",
+]
 
 
 [[bin]]
@@ -31,9 +37,6 @@ serde_json = "1.0.133"
 sha2 = "0.10.8"
 simple_logger = "2.2.0"
 tempfile = "3.14.0"
-# For SSL/TLS operations, use rustls-webpki
-rustls = "0.22"
-webpki-roots = "0.26"
 
 [dev-dependencies]
 mockito = "1.6.1"
