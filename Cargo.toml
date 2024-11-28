@@ -2,8 +2,10 @@
 name = "korrect"
 version = "0.0.0"
 authors = ["dan@badpacket.in"]
+license = "MIT"
 edition = "2021"
 description = "A kubectl version managing shim that invokes the correct kubectl version ☸ "
+keywords = ["k8s", "kubectl"]
 
 
 [[bin]]
@@ -24,11 +26,14 @@ dirs = "5.0.1"
 indicatif = "0.17.9"
 log = "0.4.14"
 regex = "1.11.1"
-reqwest = { version = "0.12", features = ["blocking", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "blocking", "json"] }
 serde_json = "1.0.133"
 sha2 = "0.10.8"
 simple_logger = "2.2.0"
 tempfile = "3.14.0"
+# For SSL/TLS operations, use rustls-webpki
+rustls = "0.22"
+webpki-roots = "0.26"
 
 [dev-dependencies]
 mockito = "1.6.1"
