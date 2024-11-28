@@ -43,34 +43,12 @@ build:
   needs:
     - test
   script:
-    # Install cross-compilation tools
-    - apt-get update && apt-get install -y musl-tools libssl-dev
-    - rustup target add x86_64-unknown-linux-musl
-    - rustup target add aarch64-unknown-linux-musl
-    
-    # Build for Linux (x86_64)
-    - cargo build --release --target x86_64-unknown-linux-musl
-    - cp target/x86_64-unknown-linux-musl/release/korrect korrect-x86_64-linux
-    - cp target/x86_64-unknown-linux-musl/release/korrect-shim korrect-shim-x86_64-linux
-    
-    # Build for Linux (aarch64)
-    - cargo build --release --target aarch64-unknown-linux-musl
-    - cp target/aarch64-unknown-linux-musl/release/korrect korrect-aarch64-linux
-    - cp target/aarch64-unknown-linux-musl/release/korrect-shim korrect-shim-aarch64-linux
-    
-    # Create archive for each platform
-    - tar -czf korrect-x86_64-linux.tar.gz korrect-x86_64-linux korrect-shim-x86_64-linux
-    - tar -czf korrect-aarch64-linux.tar.gz korrect-aarch64-linux korrect-shim-aarch64-linux
-    
-    # Calculate SHA256 checksums
-    - sha256sum korrect-x86_64-linux.tar.gz > korrect-x86_64-linux.tar.gz.sha256
-    - sha256sum korrect-aarch64-linux.tar.gz > korrect-aarch64-linux.tar.gz.sha256
+    - chmod +x build.sh
+    - ./build.sh
   artifacts:
     paths:
-      - korrect-x86_64-linux.tar.gz
-      - korrect-aarch64-linux.tar.gz
-      - korrect-x86_64-linux.tar.gz.sha256
-      - korrect-aarch64-linux.tar.gz.sha256
+      - dist/korrect-*.tar.gz
+      - dist/korrect-*.sha256
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
