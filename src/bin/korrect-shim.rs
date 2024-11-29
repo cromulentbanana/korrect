@@ -53,6 +53,7 @@ impl KorrectShimConfig {
             dl_url,
         })
     }
+
     fn get_current_stable_version(&self) -> Result<String> {
         let resp = reqwest::blocking::get(format!("{}/release/stable.txt", self.dl_url))?;
         resp.text().map_err(|e| anyhow::anyhow!(e))
@@ -138,6 +139,57 @@ impl KorrectShimConfig {
         Ok(target_path)
     }
 
+    fn find_compatible_kubectl_version(&self, target_version: &str) -> Result<Option<PathBuf>> {
+        // Parse the target version
+        let re = Regex::new(r"v(\d+)\.(\d+)\.(\d+)")?;
+        let target_captures = re
+            .captures(target_version)
+            .ok_or_else(|| anyhow!("Invalid target version format"))?;
+
+        let target_major: u32 = target_captures[1].parse()?;
+        let target_minor: u32 = target_captures[2].parse()?;
+
+        // List all existing kubectl binaries
+        let existing_versions: Vec<PathBuf> = fs::read_dir(&self.korrect_bin_path)?
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                let filename = path.file_name()?.to_str()?;
+
+                if filename.starts_with("kubectl-v") {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Find the most recent compatible version
+        let compatible_version = existing_versions
+            .iter()
+            .filter_map(|path| {
+                let filename = path.file_name()?.to_str()?;
+                let version_str = filename.trim_start_matches("kubectl-");
+
+                let captures = re.captures(version_str)?;
+                let major: u32 = captures[1].parse().ok()?;
+                let minor: u32 = captures[2].parse().ok()?;
+
+                // Check if version is within +/- 1 minor version
+                if major == target_major
+                    && minor >= target_minor.saturating_sub(1)
+                    && minor <= target_minor + 1
+                {
+                    Some((path.clone(), minor))
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|&(_, minor)| minor);
+
+        // Return the most recent compatible version path
+        Ok(compatible_version.map(|(path, _)| path))
+    }
+
     fn run(&self) -> Result<()> {
         if self.debug {
             println!("Enabled verbose logging.");
@@ -153,8 +205,19 @@ impl KorrectShimConfig {
         let kconf = kconf_owned.as_deref();
         let target_version = self.get_server_version(kconf)?;
 
-        // Download target version
-        let target_kubectl = self.download_kubectl(&target_version)?;
+        // Check for an existing compatible kubectl version
+        let target_kubectl = match self.find_compatible_kubectl_version(&target_version)? {
+            Some(compatible_path) => {
+                if self.debug {
+                    println!("Using existing compatible version: {:?}", compatible_path);
+                }
+                compatible_path
+            }
+            None => {
+                // Download target version if no compatible version exists
+                self.download_kubectl(&target_version)?
+            }
+        };
 
         if self.debug {
             println!("using [{}].", target_version);
@@ -262,6 +325,7 @@ fn normalize_version(version: &str) -> Result<String> {
 }
 
 fn main() -> Result<()> {
+    // ISSUE: let's get proper logging in place
     let debug = env::var("DEBUG").map_or(false, |v| v == "true");
     let config = KorrectShimConfig::new(debug)?;
     config.run()
